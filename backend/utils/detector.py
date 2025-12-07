@@ -1,156 +1,223 @@
 import re
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional
 from enum import Enum
+import logging
 
-class DataType(str, Enum):
-    INN = "INN"
-    SNILS = "SNILS"
-    PASSPORT = "PASSPORT"
-    CREDIT_CARD = "CREDIT_CARD"
-    PHONE = "PHONE"
-    EMAIL = "EMAIL"
-    IP_ADDRESS = "IP_ADDRESS"
+logger = logging.getLogger(__name__)
 
-class SensitivityLevel(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-    CRITICAL = "CRITICAL"
 
-class DataPattern:
-    """Паттерны для обнаружения конфиденциальных данных"""
+class IncidentSeverity(str, Enum):
+    """Уровень серьёзности инцидента"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
-    PATTERNS = {
-        DataType.INN: {
-            "regex": r"\b\d{10}(?:\d{2})?\b",
-            "name": "ИНН",
-            "sensitivity": SensitivityLevel.HIGH,
-            "description": "Идентификационный номер налогоплательщика"
-        },
-        DataType.SNILS: {
-            "regex": r"\b\d{3}-\d{3}-\d{3}\s?\d{2}\b",
-            "name": "СНИЛС",
-            "sensitivity": SensitivityLevel.HIGH,
-            "description": "Страховой номер индивидуального лицевого счёта"
-        },
-        DataType.PASSPORT: {
-            "regex": r"\b(?:\d{4}\s?\d{6}|\d{2}\s?\d{2}\s?\d{6})\b",
-            "name": "Паспорт РФ",
-            "sensitivity": SensitivityLevel.CRITICAL,
-            "description": "Серия и номер паспорта"
-        },
-        DataType.CREDIT_CARD: {
-            "regex": r"\b(?:\d{4}[\s-]?){3}\d{4}\b",
-            "name": "Банковская карта",
-            "sensitivity": SensitivityLevel.CRITICAL,
-            "description": "Номер банковской карты"
-        },
-        DataType.PHONE: {
-            "regex": r"\+?7[\s-]?\(?(?:\d{3})\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}",
-            "name": "Телефон",
-            "sensitivity": SensitivityLevel.MEDIUM,
-            "description": "Российский номер телефона"
-        },
-        DataType.EMAIL: {
-            "regex": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-            "name": "Email",
-            "sensitivity": SensitivityLevel.MEDIUM,
-            "description": "Адрес электронной почты"
-        },
-        DataType.IP_ADDRESS: {
-            "regex": r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
-            "name": "IP адрес",
-            "sensitivity": SensitivityLevel.LOW,
-            "description": "IPv4 адрес"
-        }
-    }
 
-class SensitiveDataDetector:
-    """Основной класс для детектирования чувствительных данных"""
+class IncidentAction(str, Enum):
+    """Действие при обнаружении инцидента"""
+    BLOCK = "BLOCK"              # Блокировать сообщение
+    MASK = "MASK"                # Замаскировать данные
+    NOTIFY = "NOTIFY"            # Отправить уведомление
+    QUARANTINE = "QUARANTINE"    # Поместить в карантин
+
+
+class IncidentDetector:
+    """
+    Детектор конфиденциальных данных.
+    Проверяет текст на соответствие паттернам конфиденциальной информации.
+    """
     
     def __init__(self):
-        self.compiled_patterns = {
-            data_type: re.compile(pattern["regex"]) 
-            for data_type, pattern in DataPattern.PATTERNS.items()
+        """Инициализация паттернов обнаружения"""
+        self.patterns = self._initialize_patterns()
+        logger.info("✅ Детектор инициализирован")
+    
+    def _initialize_patterns(self) -> Dict[str, Dict]:
+        """
+        Инициализация паттернов для обнаружения.
+        
+        Returns:
+            Dict с конфигурацией паттернов
+        """
+        return {
+            # ИНН - 10 цифр
+            "INN": {
+                "pattern": r"\b\d{10}\b",
+                "description": "Индивидуальный номер налогоплательщика",
+                "severity": IncidentSeverity.HIGH,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            # СНИЛС - 11 цифр через дефис
+            "SNILS": {
+                "pattern": r"\b\d{3}-\d{3}-\d{3}\s\d{2}\b",
+                "description": "Страховой номер индивидуального лицевого счёта",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            # Номер кредитной карты (Visa, Mastercard, Amex)
+            "CREDIT_CARD": {
+                "pattern": r"\b(?:\d{4}[\s-]?){3}\d{4}\b",
+                "description": "Номер кредитной карты",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 30
+            },
+            
+            # Номер паспорта (4 буквы + 6 цифр, русский паспорт)
+            "PASSPORT": {
+                "pattern": r"\b[А-Яа-я]{4}\s\d{6}\b",
+                "description": "Номер паспорта",
+                "severity": IncidentSeverity.HIGH,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            # Email адрес
+            "EMAIL": {
+                "pattern": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+                "description": "Email адрес",
+                "severity": IncidentSeverity.MEDIUM,
+                "action": IncidentAction.MASK,
+                "context_length": 25
+            },
+            
+            # Номер телефона (российский)
+            "PHONE": {
+                "pattern": r"\b(?:\+7|8)\s?(?:\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b",
+                "description": "Номер телефона",
+                "severity": IncidentSeverity.MEDIUM,
+                "action": IncidentAction.MASK,
+                "context_length": 25
+            },
+            
+            # Пароль (в явном виде в сообщении)
+            "PASSWORD": {
+                "pattern": r"(?:password|пароль|pwd|пароль)\s*[:=]\s*['\"]?(\S+)['\"]?",
+                "description": "Пароль в явном виде",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 40,
+                "flags": re.IGNORECASE
+            },
+            
+            # API ключ
+            "API_KEY": {
+                "pattern": r"(?:api[_-]?key|apikey|api_secret|secret_key)\s*[:=]\s*['\"]([A-Za-z0-9]{20,})['\"]",
+                "description": "API ключ",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 40,
+                "flags": re.IGNORECASE
+            },
+            
+            # IPv4 адрес (внутренние)
+            "INTERNAL_IP": {
+                "pattern": r"\b(?:192\.168|10\.|172\.(?:1[6-9]|2[0-9]|3))\.\d{1,3}\.\d{1,3}\b",
+                "description": "Внутренний IP адрес",
+                "severity": IncidentSeverity.LOW,
+                "action": IncidentAction.NOTIFY,
+                "context_length": 20
+            }
         }
     
-    def scan(self, text: str) -> List[Dict]:
-        findings = []
+    def detect(
+        self,
+        text: str,
+        user_id: str,
+        channel_id: str
+    ) -> List[Dict]:
+        """
+        Обнаружить инциденты в тексте.
         
-        for data_type, pattern in self.compiled_patterns.items():
-            matches = pattern.finditer(text)
+        Args:
+            text: Текст для проверки
+            user_id: ID пользователя
+            channel_id: ID канала
+        
+        Returns:
+            List[Dict]: Список найденных инцидентов
+        """
+        incidents = []
+        
+        logger.debug(f"🔍 Сканирование текста от {user_id}")
+        
+        # Проверяем каждый паттерн
+        for incident_type, config in self.patterns.items():
+            pattern = config["pattern"]
+            flags = config.get("flags", 0)
+            
+            # Ищем совпадения
+            matches = re.finditer(pattern, text, flags)
             
             for match in matches:
-                finding = {
-                    "data_type": data_type,
-                    "value": match.group(),
-                    "start": match.start(),
-                    "end": match.end(),
-                    "sensitivity": DataPattern.PATTERNS[data_type]["sensitivity"],
-                    "name": DataPattern.PATTERNS[data_type]["name"],
-                    "description": DataPattern.PATTERNS[data_type]["description"],
-                    "context_before": text[max(0, match.start()-30):match.start()],
-                    "context_after": text[match.end():min(len(text), match.end()+30)]
+                # Извлекаем контекст
+                context = self._extract_context(text, match, config["context_length"])
+                
+                incident = {
+                    "type": incident_type,
+                    "description": config["description"],
+                    "severity": config["severity"].value,
+                    "action": config["action"].value,
+                    "pattern": match.group(0),
+                    "context": context,
+                    "match_position": (match.start(), match.end()),
+                    "user_id": user_id,
+                    "channel_id": channel_id
                 }
                 
-                if self._validate_finding(data_type, match.group()):
-                    findings.append(finding)
+                incidents.append(incident)
+                logger.warning(f"⚠️ Обнаружен {incident_type}: {match.group(0)}")
         
-        return findings
+        return incidents
     
-    def _validate_finding(self, data_type: DataType, value: str) -> bool:
-        """Дополнительная валидация для снижения false positives"""
+    def _extract_context(
+        self,
+        text: str,
+        match,
+        context_length: int = 30
+    ) -> str:
+        """
+        Извлечь контекст вокруг найденного совпадения.
         
-        if data_type == DataType.INN:
-            return self._validate_inn(value)
-        elif data_type == DataType.CREDIT_CARD:
-            return self._luhn_check(value.replace(" ", "").replace("-", ""))
-        elif data_type == DataType.IP_ADDRESS:
-            return self._validate_ip(value)
+        Args:
+            text: Полный текст
+            match: Объект совпадения из re.finditer
+            context_length: Длина контекста с каждой стороны
         
-        return True
+        Returns:
+            str: Контекст
+        """
+        start = max(0, match.start() - context_length)
+        end = min(len(text), match.end() + context_length)
+        
+        context = text[start:end]
+        
+        # Добавляем многоточие если контекст обрезан
+        if start > 0:
+            context = "..." + context
+        if end < len(text):
+            context = context + "..."
+        
+        return context
     
-    def _validate_inn(self, inn: str) -> bool:
-        """Проверка контрольной суммы ИНН"""
-        inn = inn.replace(" ", "")
-        if len(inn) not in [10, 12]:
-            return False
+    def batch_detect(self, texts: List[str], user_ids: List[str], channel_ids: List[str]) -> List[List[Dict]]:
+        """
+        Обнаружить инциденты в нескольких текстах.
         
-        return inn.isdigit()
-    
-    def _luhn_check(self, card_number: str) -> bool:
-        """Алгоритм Луна для проверки номера карты"""
-        def digits_of(n):
-            return [int(d) for d in str(n)]
+        Args:
+            texts: Список текстов
+            user_ids: Список ID пользователей
+            channel_ids: Список ID каналов
         
-        digits = digits_of(card_number)
-        odd_digits = digits[-1::-2]
-        even_digits = digits[-2::-2]
-        checksum = sum(odd_digits)
-        
-        for d in even_digits:
-            checksum += sum(digits_of(d*2))
-        
-        return checksum % 10 == 0
-    
-    def _validate_ip(self, ip: str) -> bool:
-        """Проверка валидности IP адреса"""
-        parts = ip.split(".")
-        if len(parts) != 4:
-            return False
-        
-        try:
-            return all(0 <= int(part) <= 255 for part in parts)
-        except ValueError:
-            return False
-    
-    def get_risk_score(self, findings: List[Dict]) -> int:
-        """Вычисляет общий риск на основе найденных данных"""
-        severity_scores = {
-            SensitivityLevel.LOW: 10,
-            SensitivityLevel.MEDIUM: 30,
-            SensitivityLevel.HIGH: 60,
-            SensitivityLevel.CRITICAL: 100
-        }
-        
-        return sum(severity_scores[f["sensitivity"]] for f in findings)
+        Returns:
+            List[List[Dict]]: Список списков инцидентов
+        """
+        return [
+            self.detect(text, user_id, channel_id)
+            for text, user_id, channel_id in zip(texts, user_ids, channel_ids)
+        ]

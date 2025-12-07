@@ -1,77 +1,188 @@
-import hashlib
-import re
 from cryptography.fernet import Fernet
-from typing import List, Dict
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.backends import default_backend
+import os
+import base64
+import logging
+from typing import Optional
 
-class DataMasker:
-    """Класс для маскирования конфиденциальных данных"""
-    
-    @staticmethod
-    def mask_value(value: str, data_type: str) -> str:
-        """Маскирует значение в зависимости от типа данных"""
-        
-        if data_type == "CREDIT_CARD":
-            clean = re.sub(r'\D', '', value)
-            return f"****-****-****-{clean[-4:]}"
-        
-        elif data_type == "PHONE":
-            clean = re.sub(r'\D', '', value)
-            return f"+7 ({clean[1:4]}) ***-**-{clean[-2:]}"
-        
-        elif data_type == "EMAIL":
-            parts = value.split("@")
-            if len(parts) == 2:
-                username = parts[0]
-                domain = parts[1]
-                masked_username = username[0] + "*" * (len(username) - 1)
-                return f"{masked_username}@{domain}"
-        
-        elif data_type == "INN":
-            return f"{value[:2]}********"
-        
-        elif data_type == "SNILS":
-            return f"***-***-*** {value[-2:]}"
-        
-        return "*" * len(value)
-    
-    @staticmethod
-    def mask_text(text: str, findings: List[Dict]) -> str:
-        """Маскирует все найденные конфиденциальные данные в тексте"""
-        
-        sorted_findings = sorted(findings, key=lambda x: x["start"], reverse=True)
-        
-        masked_text = text
-        for finding in sorted_findings:
-            masked_value = DataMasker.mask_value(
-                finding["value"], 
-                finding["data_type"]
-            )
-            masked_text = (
-                masked_text[:finding["start"]] + 
-                masked_value + 
-                masked_text[finding["end"]:]
-            )
-        
-        return masked_text
+logger = logging.getLogger(__name__)
 
-class DataEncryption:
-    """Класс для шифрования данных"""
+
+class EncryptionService:
+    """
+    Сервис для шифрования и расшифровки конфиденциальных данных.
+    Использует Fernet (симметричное шифрование AES-128).
+    """
     
-    def __init__(self, key: bytes = None):
-        self.key = key or Fernet.generate_key()
-        self.cipher = Fernet(self.key)
+    def __init__(self, key_path: Optional[str] = None, password: Optional[str] = None):
+        """
+        Инициализация сервиса шифрования.
+        
+        Args:
+            key_path: Путь к файлу с ключом шифрования
+            password: Пароль для генерации ключа (если key_path не указан)
+        """
+        self.key_path = key_path
+        self.cipher = None
+        
+        if key_path:
+            self._load_key_from_file(key_path)
+        elif password:
+            self._generate_key_from_password(password)
+        else:
+            self._generate_new_key()
+        
+        logger.info("✅ Сервис шифрования инициализирован")
     
-    def encrypt(self, data: str) -> str:
-        """Шифрует данные"""
-        encrypted = self.cipher.encrypt(data.encode())
-        return encrypted.decode()
+    def _generate_new_key(self):
+        """Генерировать новый ключ шифрования"""
+        key = Fernet.generate_key()
+        self.cipher = Fernet(key)
+        logger.info("🔑 Новый ключ шифрования сгенерирован")
     
-    def decrypt(self, encrypted_data: str) -> str:
-        """Дешифрует данные"""
-        decrypted = self.cipher.decrypt(encrypted_data.encode())
-        return decrypted.decode()
+    def _generate_key_from_password(self, password: str):
+        """
+        Генерировать ключ из пароля.
+        
+        Args:
+            password: Пароль для генерации ключа
+        """
+        # Используем PBKDF2 для генерации ключа из пароля
+        salt = b'dlp_messenger_salt'  # В production использовать случайный salt
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        
+        derived_key = kdf.derive(password.encode())
+        key = base64.urlsafe_b64encode(derived_key)
+        
+        self.cipher = Fernet(key)
+        logger.info("🔑 Ключ шифрования сгенерирован из пароля")
     
-    @staticmethod
-    def hash_data(data: str) -> str:
-        """Создаёт необратимый хеш данных"""
-        return hashlib.sha256(data.encode()).hexdigest()
+    def _load_key_from_file(self, key_path: str):
+        """
+        Загрузить ключ из файла.
+        
+        Args:
+            key_path: Путь к файлу с ключом
+        """
+        try:
+            if os.path.exists(key_path):
+                with open(key_path, 'rb') as f:
+                    key = f.read()
+                self.cipher = Fernet(key)
+                logger.info(f"🔑 Ключ загружен из {key_path}")
+            else:
+                logger.warning(f"⚠️ Файл ключа не найден: {key_path}")
+                self._generate_new_key()
+                self._save_key_to_file(key_path)
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка при загрузке ключа: {str(e)}")
+            raise
+    
+    def _save_key_to_file(self, key_path: str):
+        """
+        Сохранить ключ в файл.
+        
+        Args:
+            key_path: Путь для сохранения ключа
+        """
+        try:
+            os.makedirs(os.path.dirname(key_path), exist_ok=True)
+            with open(key_path, 'wb') as f:
+                f.write(self.cipher.key)
+            logger.info(f"💾 Ключ сохранён в {key_path}")
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка при сохранении ключа: {str(e)}")
+            raise
+    
+    def encrypt(self, plaintext: str) -> str:
+        """
+        Зашифровать текст.
+        
+        Args:
+            plaintext: Исходный текст
+        
+        Returns:
+            str: Зашифрованный текст (base64)
+        """
+        try:
+            encrypted_bytes = self.cipher.encrypt(plaintext.encode())
+            encrypted_str = base64.b64encode(encrypted_bytes).decode('utf-8')
+            return encrypted_str
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка при шифровании: {str(e)}")
+            raise
+    
+    def decrypt(self, ciphertext: str) -> str:
+        """
+        Расшифровать текст.
+        
+        Args:
+            ciphertext: Зашифрованный текст (base64)
+        
+        Returns:
+            str: Исходный текст
+        """
+        try:
+            encrypted_bytes = base64.b64decode(ciphertext.encode('utf-8'))
+            decrypted_bytes = self.cipher.decrypt(encrypted_bytes)
+            decrypted_str = decrypted_bytes.decode('utf-8')
+            return decrypted_str
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка при расшифровании: {str(e)}")
+            raise
+    
+    def encrypt_dict(self, data: dict, keys_to_encrypt: list = None) -> dict:
+        """
+        Зашифровать указанные ключи в словаре.
+        
+        Args:
+            data: Словарь данных
+            keys_to_encrypt: Список ключей для шифрования
+        
+        Returns:
+            dict: Словарь с зашифрованными значениями
+        """
+        encrypted_data = data.copy()
+        
+        if keys_to_encrypt:
+            for key in keys_to_encrypt:
+                if key in encrypted_data:
+                    encrypted_data[key] = self.encrypt(str(encrypted_data[key]))
+        
+        return encrypted_data
+    
+    def decrypt_dict(self, data: dict, keys_to_decrypt: list = None) -> dict:
+        """
+        Расшифровать указанные ключи в словаре.
+        
+        Args:
+            data: Словарь данных
+            keys_to_decrypt: Список ключей для расшифровки
+        
+        Returns:
+            dict: Словарь с расшифрованными значениями
+        """
+        decrypted_data = data.copy()
+        
+        if keys_to_decrypt:
+            for key in keys_to_decrypt:
+                if key in decrypted_data:
+                    try:
+                        decrypted_data[key] = self.decrypt(decrypted_data[key])
+                    except Exception as e:
+                        logger.warning(f"⚠️ Не удалось расшифровать ключ {key}: {str(e)}")
+        
+        return decrypted_data
