@@ -1,290 +1,364 @@
 .incident-list-container {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  overflow: hidden;
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-.incident-list-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(94, 82, 64, 0.12);
+/* Заголовок */
+.incident-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.incident-list-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2121;
+.incident-header h2 {
   margin: 0;
+  color: #2c3e50;
+  font-size: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
 .incident-count {
-  font-size: 13px;
-  color: #626c71;
-  margin: 0;
-}
-
-.incident-list-controls {
-  padding: 16px 24px;
-  background: #fafafa;
-  border-bottom: 1px solid rgba(94, 82, 64, 0.12);
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.search-box {
-  flex: 1;
-  min-width: 200px;
-}
-
-.search-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid rgba(94, 82, 64, 0.2);
-  border-radius: 6px;
   font-size: 14px;
-  transition: border-color 150ms ease-in-out;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: #2180a0;
-  box-shadow: 0 0 0 3px rgba(33, 128, 160, 0.1);
-}
-
-.filter-badges {
-  display: flex;
-  gap: 8px;
-}
-
-.filter-badge {
-  display: inline-block;
-  padding: 6px 12px;
-  background: #2180a0;
-  color: white;
-  border-radius: 4px;
-  font-size: 12px;
+  color: #7f8c8d;
   font-weight: 500;
 }
 
-.table-wrapper {
-  overflow-x: auto;
-}
-
-.incidents-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.incidents-table thead {
-  background: #f9f9f9;
-}
-
-.incidents-table th {
-  padding: 12px 16px;
-  text-align: left;
-  font-weight: 600;
-  font-size: 13px;
-  color: #1f2121;
-  border-bottom: 1px solid rgba(94, 82, 64, 0.2);
-  user-select: none;
-}
-
-.incidents-table th.sortable {
+.refresh-button {
+  padding: 8px 16px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 5px;
   cursor: pointer;
-  transition: background-color 150ms ease-in-out;
+  font-size: 14px;
+  transition: all 0.3s ease;
 }
 
-.incidents-table th.sortable:hover {
-  background: #f0f0f0;
+.refresh-button:hover {
+  background: #2980b9;
+  transform: translateY(-1px);
 }
 
-.incidents-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(94, 82, 64, 0.12);
+.refresh-button:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Загрузка */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner p {
+  margin-top: 15px;
+  color: #7f8c8d;
+  font-size: 16px;
+}
+
+/* Ошибки */
+.error-message {
+  text-align: center;
+  padding: 40px 20px;
+  background: #fef5f5;
+  border: 1px solid #e74c3c;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.error-message h3 {
+  color: #e74c3c;
+  margin: 0 0 10px 0;
+}
+
+.error-message p {
+  color: #c0392b;
+  margin: 10px 0 20px 0;
+}
+
+.retry-button {
+  padding: 10px 20px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s ease;
+}
+
+.retry-button:hover {
+  background: #c0392b;
+}
+
+.error-banner {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 12px 20px;
+  border-radius: 5px;
+  margin-bottom: 15px;
   font-size: 14px;
 }
 
+/* Таблица */
+.table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.incident-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.incident-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.incident-table th {
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.incident-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.incident-table th.sortable:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sort-indicator {
+  font-size: 12px;
+  margin-left: 5px;
+}
+
+.incident-table tbody tr {
+  border-bottom: 1px solid #ecf0f1;
+  transition: all 0.2s ease;
+}
+
+.incident-table tbody tr:hover {
+  background: #f8f9fa;
+  transform: scale(1.01);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.incident-table td {
+  padding: 12px;
+}
+
+/* Колонки */
 .checkbox-column {
   width: 40px;
   text-align: center;
 }
 
-.checkbox-column input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: #2180a0;
-}
-
-.id-column {
-  width: 80px;
-  font-weight: 600;
-  color: #626c71;
-}
-
 .date-column {
-  width: 180px;
-  font-family: monospace;
-  font-size: 12px;
-  color: #626c71;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #34495e;
 }
 
 .type-column {
-  flex: 1;
   min-width: 200px;
 }
 
-.type-badge {
-  display: inline-block;
+.user-column code {
+  background: #ecf0f1;
   padding: 4px 8px;
-  background: #f0f0f0;
   border-radius: 4px;
   font-size: 13px;
+  color: #2c3e50;
 }
 
-.user-column {
-  width: 140px;
-}
-
-.user-name {
-  font-family: monospace;
-  font-size: 13px;
-  color: #2180a0;
-}
-
-.severity-column {
-  width: 120px;
+.platform-column {
   text-align: center;
+  color: #7f8c8d;
 }
 
-.action-column {
-  width: 120px;
-  text-align: center;
+/* Бейджи серьезности */
+.severity-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
-/* Серьёзность */
-.badge-high {
-  background: #c01547;
-  color: white;
+.severity-badge.high {
+  background: #fee;
+  color: #c0392b;
+  border: 1px solid #e74c3c;
 }
 
-.badge-medium {
-  background: #a84b2f;
-  color: white;
+.severity-badge.medium {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
 }
 
-.badge-low {
-  background: #21a046;
-  color: white;
+.severity-badge.low {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #28a745;
 }
 
-/* Действия */
+/* Бейджи действий */
 .action-badge {
   display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.action-badge.blocked {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.action-badge.masked {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.action-badge.allowed {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.action-badge.quarantine {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.action-badge.notify {
+  background: #e2e3e5;
+  color: #383d41;
+  border: 1px solid #d6d8db;
+}
+
+/* Кнопка Investigate */
+.investigate-button {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
-.action-блокировано {
-  background: rgba(192, 21, 47, 0.12);
-  color: #c01547;
+.investigate-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-.action-маскировано {
-  background: rgba(33, 128, 141, 0.12);
-  color: #2180a0;
+.investigate-button:active {
+  transform: translateY(0);
 }
 
-.action-разрешено {
-  background: rgba(33, 160, 70, 0.12);
-  color: #21a046;
+/* Индикатор обновления */
+.updating-indicator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #3498db;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 25px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
-.action-карантин {
-  background: rgba(168, 75, 47, 0.12);
-  color: #a84b2f;
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
-/* Выделение строк */
-.incident-row.selected {
-  background: rgba(33, 128, 160, 0.05);
+/* Пустое состояние */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #95a5a6;
+  font-size: 16px;
 }
 
-.incident-row:hover {
-  background: rgba(94, 82, 64, 0.03);
-}
-
-.incident-row.selected:hover {
-  background: rgba(33, 128, 160, 0.1);
-}
-
-/* Резиновые размеры для мобилок */
+/* Адаптивность */
 @media (max-width: 768px) {
-  .incident-list-header {
+  .incident-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 15px;
   }
 
-  .incident-list-controls {
-    flex-direction: column;
-  }
-
-  .search-box {
+  .header-actions {
     width: 100%;
+    justify-content: space-between;
   }
 
-  .incidents-table {
+  .incident-table {
     font-size: 12px;
   }
 
-  .incidents-table th,
-  .incidents-table td {
-    padding: 8px 12px;
+  .incident-table th,
+  .incident-table td {
+    padding: 8px 6px;
   }
 
-  .date-column,
-  .severity-column,
-  .action-column {
-    width: auto;
+  .investigate-button {
+    padding: 5px 10px;
+    font-size: 11px;
   }
-
-  .type-badge {
-    font-size: 12px;
-  }
-}
-
-.incident-list-footer {
-  padding: 16px 24px;
-  background: #fafafa;
-  border-top: 1px solid rgba(94, 82, 64, 0.12);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.footer-info {
-  margin: 0;
-  font-size: 13px;
-  color: #626c71;
-}
-
-.btn-export {
-  background: #2180a0;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 500;
-  transition: background-color 150ms ease-in-out;
-}
-
-.btn-export:hover {
-  background: #1d7490;
 }
