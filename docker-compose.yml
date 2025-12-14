@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: dlp-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - dlp-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dlp-backend
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - ENCRYPTION_KEY_PATH=/app/keys/encryption.key
+    depends_on:
+      elasticsearch:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    networks:
+      - dlp-net
+
+  telegram-bot:
+    build:
+      context: ./backend/connectors
+      dockerfile: Dockerfile
+    container_name: dlp-telegram-bot
+    env_file:
+      - ./backend/connectors/.env
+    depends_on:
+      - backend
+    networks:
+      - dlp-net
+
+networks:
+  dlp-net:
+
+volumes:
+  es-data:

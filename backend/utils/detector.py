@@ -1,0 +1,210 @@
+import re
+from typing import List, Dict, Optional
+from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class IncidentSeverity(str, Enum):
+    """Уровень серьёзности инцидента"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class IncidentAction(str, Enum):
+    """Действие при обнаружении инцидента"""
+    BLOCK = "BLOCK"              
+    MASK = "MASK"                
+    NOTIFY = "NOTIFY"            
+    QUARANTINE = "QUARANTINE"    
+
+
+class IncidentDetector:
+    """
+    Детектор конфиденциальных данных.
+    Проверяет текст на соответствие паттернам конфиденциальной информации.
+    """
+    
+    def __init__(self):
+        """Инициализация паттернов обнаружения"""
+        self.patterns = self._initialize_patterns()
+        logger.info("✅ Детектор инициализирован")
+    
+    def _initialize_patterns(self) -> Dict[str, Dict]:
+        """
+        Инициализация паттернов для обнаружения.
+        
+        Returns:
+            Dict с конфигурацией паттернов
+        """
+        return {
+            "INN": {
+                "pattern": r"\b\d{10}\b",
+                "description": "Индивидуальный номер налогоплательщика",
+                "severity": IncidentSeverity.HIGH,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            "SNILS": {
+                "pattern": r"\b\d{3}-\d{3}-\d{3}\s\d{2}\b",
+                "description": "Страховой номер индивидуального лицевого счёта",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            "CREDIT_CARD": {
+                "pattern": r"\b(?:\d{4}[\s-]?){3}\d{4}\b",
+                "description": "Номер кредитной карты",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 30
+            },
+            
+            "PASSPORT": {
+                "pattern": r"\b[А-Яа-я]{4}\s\d{6}\b",
+                "description": "Номер паспорта",
+                "severity": IncidentSeverity.HIGH,
+                "action": IncidentAction.BLOCK,
+                "context_length": 20
+            },
+            
+            "EMAIL": {
+                "pattern": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+                "description": "Email адрес",
+                "severity": IncidentSeverity.MEDIUM,
+                "action": IncidentAction.MASK,
+                "context_length": 25
+            },
+            
+            "PHONE": {
+                "pattern": r"\b(?:\+7|8)\s?(?:\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b",
+                "description": "Номер телефона",
+                "severity": IncidentSeverity.MEDIUM,
+                "action": IncidentAction.MASK,
+                "context_length": 25
+            },
+            
+            "PASSWORD": {
+                "pattern": r"(?:password|пароль|pwd|пароль)\s*[:=]\s*['\"]?(\S+)['\"]?",
+                "description": "Пароль в явном виде",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 40,
+                "flags": re.IGNORECASE
+            },
+            
+            "API_KEY": {
+                "pattern": r"(?:api[_-]?key|apikey|api_secret|secret_key)\s*[:=]\s*['\"]([A-Za-z0-9]{20,})['\"]",
+                "description": "API ключ",
+                "severity": IncidentSeverity.CRITICAL,
+                "action": IncidentAction.BLOCK,
+                "context_length": 40,
+                "flags": re.IGNORECASE
+            },
+            
+            "INTERNAL_IP": {
+                "pattern": r"\b(?:192\.168|10\.|172\.(?:1[6-9]|2[0-9]|3))\.\d{1,3}\.\d{1,3}\b",
+                "description": "Внутренний IP адрес",
+                "severity": IncidentSeverity.LOW,
+                "action": IncidentAction.NOTIFY,
+                "context_length": 20
+            }
+        }
+    
+    def detect(
+        self,
+        text: str,
+        user_id: str,
+        channel_id: str
+    ) -> List[Dict]:
+        """
+        Обнаружить инциденты в тексте.
+        
+        Args:
+            text: Текст для проверки
+            user_id: ID пользователя
+            channel_id: ID канала
+        
+        Returns:
+            List[Dict]: Список найденных инцидентов
+        """
+        incidents = []
+        
+        logger.debug(f"🔍 Сканирование текста от {user_id}")
+        
+        for incident_type, config in self.patterns.items():
+            pattern = config["pattern"]
+            flags = config.get("flags", 0)
+            
+            matches = re.finditer(pattern, text, flags)
+            
+            for match in matches:
+                context = self._extract_context(text, match, config["context_length"])
+                
+                incident = {
+                    "type": incident_type,
+                    "description": config["description"],
+                    "severity": config["severity"].value,
+                    "action": config["action"].value,
+                    "pattern": match.group(0),
+                    "context": context,
+                    "match_position": (match.start(), match.end()),
+                    "user_id": user_id,
+                    "channel_id": channel_id
+                }
+                
+                incidents.append(incident)
+                logger.warning(f"⚠️ Обнаружен {incident_type}: {match.group(0)}")
+        
+        return incidents
+    
+    def _extract_context(
+        self,
+        text: str,
+        match,
+        context_length: int = 30
+    ) -> str:
+        """
+        Извлечь контекст вокруг найденного совпадения.
+        
+        Args:
+            text: Полный текст
+            match: Объект совпадения из re.finditer
+            context_length: Длина контекста с каждой стороны
+        
+        Returns:
+            str: Контекст
+        """
+        start = max(0, match.start() - context_length)
+        end = min(len(text), match.end() + context_length)
+        
+        context = text[start:end]
+        
+        if start > 0:
+            context = "..." + context
+        if end < len(text):
+            context = context + "..."
+        
+        return context
+    
+    def batch_detect(self, texts: List[str], user_ids: List[str], channel_ids: List[str]) -> List[List[Dict]]:
+        """
+        Обнаружить инциденты в нескольких текстах.
+        
+        Args:
+            texts: Список текстов
+            user_ids: Список ID пользователей
+            channel_ids: Список ID каналов
+        
+        Returns:
+            List[List[Dict]]: Список списков инцидентов
+        """
+        return [
+            self.detect(text, user_id, channel_id)
+            for text, user_id, channel_id in zip(texts, user_ids, channel_ids)
+        ]
