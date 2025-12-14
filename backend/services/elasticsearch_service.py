@@ -25,7 +25,6 @@ class ElasticsearchService:
         try:
             self.client = Elasticsearch(hosts=hosts)
             
-            # Проверяем связь
             if self.client.ping():
                 logger.info(f"✅ Подключение к Elasticsearch успешно: {hosts}")
             else:
@@ -108,7 +107,6 @@ class ElasticsearchService:
             Dict: Результат индексирования
         """
         try:
-            # Убеждаемся, что индекс существует
             self.create_index(index)
             
             result = self.client.index(
@@ -148,7 +146,6 @@ class ElasticsearchService:
             List[Dict]: Список инцидентов
         """
         try:
-            # Формируем query
             query_body = {"bool": {"must": []}}
             
             if filters:
@@ -164,7 +161,6 @@ class ElasticsearchService:
             
             response = self.client.search(index=index, body=body)
             
-            # Извлекаем документы
             incidents = []
             for hit in response['hits']['hits']:
                 doc = hit['_source']

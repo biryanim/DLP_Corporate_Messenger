@@ -8,10 +8,10 @@ from typing import List, Optional
 import os
 from dotenv import load_dotenv
 
-from backend.utils.detector import IncidentDetector
-from backend.utils.encryption import EncryptionService
-from backend.services.elasticsearch_service import ElasticsearchService
-from backend.models.incident import IncidentModel, ScanRequest, IncidentResponse
+from utils.detector import IncidentDetector
+from utils.encryption import EncryptionService
+from services.elasticsearch_service import ElasticsearchService
+from models.incident import ScanRequest, IncidentResponse
 
 load_dotenv()
 
@@ -60,12 +60,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Ошибка при очистке: {str(e)}")
 
 
-app = FastAPI(
-    title="DLP Messenger Control API",
-    description="API для контроля утечек данных в мессенджерах",
-    version="1.0.0",
-    lifespan=lifespan
-)
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,23 +71,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
-async def health_check():
-    """Проверка здоровья приложения"""
-    es_status = "connected" if es_service and es_service.is_connected() else "disconnected"
-    
-    return {
-        "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
-        "services": {
-            "detector": "ready" if detector else "not_ready",
-            "encryption": "ready" if encryption_service else "not_ready",
-            "elasticsearch": es_status
-        }
-    }
-
-
-@app.post("/api/v1/scan", response_model=dict)
+@app.post("/api/scan", response_model=dict)
 async def scan_message(
     request: ScanRequest,
     background_tasks: BackgroundTasks
@@ -200,7 +179,7 @@ async def save_incident_to_elasticsearch(incident_doc: dict):
         logger.error(f"❌ Ошибка при сохранении в Elasticsearch: {str(e)}")
 
 
-@app.get("/api/v1/incidents", response_model=List[IncidentResponse])
+@app.get("/api/incidents", response_model=List[IncidentResponse])
 async def get_incidents(
     limit: int = 50,
     offset: int = 0,
@@ -284,18 +263,3 @@ async def get_incidents(
     except Exception as e:
         logger.error(f"❌ Ошибка при получении инцидентов: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching incidents: {str(e)}")
-
-
-@app.get("/")
-async def root():
-    """Корневой эндпоинт"""
-    return {
-        "name": "DLP Messenger Control API",
-        "version": "1.0.0",
-        "docs": "http://localhost:8000/docs",
-        "endpoints": {
-            "health": "GET /health",
-            "scan": "POST /api/v1/scan",
-            "incidents": "GET /api/v1/incidents"
-        }
-    }
