@@ -9,7 +9,6 @@ export default function IncidentList() {
   const [selectedIncidents, setSelectedIncidents] = useState(new Set());
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
 
-  // Функция загрузки данных с бэкенда
   const fetchIncidents = async () => {
     try {
       const response = await axios.get('/api/v1/incidents', {
@@ -28,21 +27,18 @@ export default function IncidentList() {
     }
   };
 
-  // Первоначальная загрузка данных
   useEffect(() => {
     fetchIncidents();
   }, []);
 
-  // Поллинг каждые 3 секунды
   useEffect(() => {
     const interval = setInterval(() => {
       fetchIncidents();
-    }, 3000); // 3 секунды
+    }, 3000);
 
-    return () => clearInterval(interval); // Очистка при размонтировании
+    return () => clearInterval(interval); 
   }, []);
 
-  // Сортировка
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -51,7 +47,6 @@ export default function IncidentList() {
     setSortConfig({ key, direction });
   };
 
-  // Применение сортировки
   const sortedIncidents = React.useMemo(() => {
     let sortableIncidents = [...incidents];
     if (sortConfig.key) {
@@ -59,7 +54,6 @@ export default function IncidentList() {
         let aValue = a[sortConfig.key];
         let bValue = b[sortConfig.key];
 
-        // Для даты
         if (sortConfig.key === 'timestamp') {
           aValue = new Date(aValue);
           bValue = new Date(bValue);
@@ -77,7 +71,6 @@ export default function IncidentList() {
     return sortableIncidents;
   }, [incidents, sortConfig]);
 
-  // Выбор инцидентов
   const toggleIncidentSelection = (id) => {
     const newSelected = new Set(selectedIncidents);
     if (newSelected.has(id)) {
@@ -96,13 +89,11 @@ export default function IncidentList() {
     }
   };
 
-  // Открыть Kibana для расследования
   const handleInvestigate = (incidentId) => {
     const kibanaUrl = `http://localhost:5601/app/discover#/?_a=(query:(language:kuery,query:'incident_id:${incidentId}'))`;
     window.open(kibanaUrl, '_blank');
   };
 
-  // Форматирование даты
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString('ru-RU', {
@@ -115,7 +106,6 @@ export default function IncidentList() {
     });
   };
 
-  // Определение серьезности по типу
   const getSeverityClass = (incidentType) => {
     if (incidentType.includes('ИНН') || incidentType.includes('СНИЛС') || incidentType.includes('Банковская карта')) {
       return 'high';
@@ -126,7 +116,6 @@ export default function IncidentList() {
     return 'low';
   };
 
-  // Получение бейджа действия
   const getActionBadge = (action) => {
     const badges = {
       'BLOCK': { text: 'БЛОКИРОВАНО', class: 'blocked' },
