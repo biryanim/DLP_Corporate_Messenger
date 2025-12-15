@@ -12,17 +12,58 @@ export default function IncidentList() {
   // Функция загрузки данных с бэкенда
   const fetchIncidents = async () => {
     try {
-      const response = await axios.get('/api/v1/incidents', {
+      const response = await axios.get('http://localhost:8000/api/incidents', {
         params: {
           limit: 100,
           offset: 0
         }
       });
-      setIncidents(response.data.incidents || []);
+      
+      // Добавляем логирование для отладки
+      console.log('Получены данные с бэкенда:', response.data);
+      
+      // Проверяем разные возможные структуры данных
+      let incidentsData = [];
+      
+      if (Array.isArray(response.data)) {
+        // Если ответ - массив
+        incidentsData = response.data;
+      } else if (response.data.incidents && Array.isArray(response.data.incidents)) {
+        // Если ответ { incidents: [...] }
+        incidentsData = response.data.incidents;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        // Если ответ { data: [...] }
+        incidentsData = response.data.data;
+      } else if (response.data.results && Array.isArray(response.data.results)) {
+        // Если ответ { results: [...] }
+        incidentsData = response.data.results;
+      } else {
+        // Если структура неизвестна, пытаемся преобразовать объект в массив
+        incidentsData = Object.values(response.data);
+        if (!Array.isArray(incidentsData)) {
+          incidentsData = [];
+        }
+      }
+      
+      console.log('Обработанные инциденты:', incidentsData);
+      
+      // Преобразуем данные, если нужно
+      const formattedIncidents = incidentsData.map(incident => ({
+        id: incident.id || incident._id || Math.random().toString(36).substr(2, 9),
+        timestamp: incident.timestamp || incident.date || incident.created_at || new Date().toISOString(),
+        incident_type: incident.incident_type || incident.type || incident.category || 'Unknown',
+        user_id: incident.user_id || incident.user || incident.employee_id || 'N/A',
+        platform: incident.platform || incident.source || incident.channel || 'Unknown',
+        action: incident.action || incident.response || 'NOTIFY',
+        // Добавляем другие поля, которые могут быть нужны
+        ...incident
+      }));
+      
+      setIncidents(formattedIncidents);
       setError(null);
     } catch (err) {
       console.error('Ошибка загрузки инцидентов:', err);
-      setError(err.message);
+      setError(err.response?.data?.message || err.message || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
@@ -37,9 +78,9 @@ export default function IncidentList() {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchIncidents();
-    }, 3000); // 3 секунды
+    }, 3000);
 
-    return () => clearInterval(interval); // Очистка при размонтировании
+    return () => clearInterval(interval);
   }, []);
 
   // Сортировка
@@ -54,24 +95,41 @@ export default function IncidentList() {
   // Применение сортировки
   const sortedIncidents = React.useMemo(() => {
     let sortableIncidents = [...incidents];
-    if (sortConfig.key) {
+    if (sortConfig.key && sortableIncidents.length > 0) {
       sortableIncidents.sort((a, b) => {
         let aValue = a[sortConfig.key];
         let bValue = b[sortConfig.key];
 
+        // Если значения undefined или null
+        if (aValue == null) aValue = '';
+        if (bValue == null) bValue = '';
+
         // Для даты
         if (sortConfig.key === 'timestamp') {
-          aValue = new Date(aValue);
-          bValue = new Date(bValue);
+          const dateA = new Date(aValue);
+          const dateB = new Date(bValue);
+          if (sortConfig.direction === 'asc') {
+            return dateA - dateB;
+          } else {
+            return dateB - dateA;
+          }
         }
 
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
+        // Для строк
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          if (sortConfig.direction === 'asc') {
+            return aValue.localeCompare(bValue);
+          } else {
+            return bValue.localeCompare(aValue);
+          }
         }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
+
+        // Для чисел
+        if (sortConfig.direction === 'asc') {
+          return aValue < bValue ? -1 : (aValue > bValue ? 1 : 0);
+        } else {
+          return aValue > bValue ? -1 : (aValue < bValue ? 1 : 0);
         }
-        return 0;
       });
     }
     return sortableIncidents;
@@ -89,7 +147,7 @@ export default function IncidentList() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIncidents.size === incidents.length) {
+    if (selectedIncidents.size === incidents.length && incidents.length > 0) {
       setSelectedIncidents(new Set());
     } else {
       setSelectedIncidents(new Set(incidents.map(inc => inc.id)));
@@ -104,23 +162,33 @@ export default function IncidentList() {
 
   // Форматирование даты
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('ru-RU', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Некорректная дата';
+      }
+      return date.toLocaleString('ru-RU', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (error) {
+      return dateString || 'Дата не указана';
+    }
   };
 
   // Определение серьезности по типу
   const getSeverityClass = (incidentType) => {
-    if (incidentType.includes('ИНН') || incidentType.includes('СНИЛС') || incidentType.includes('Банковская карта')) {
+    if (!incidentType) return 'low';
+    
+    const typeStr = incidentType.toString().toLowerCase();
+    if (typeStr.includes('инн') || typeStr.includes('снилс') || typeStr.includes('банковская') || typeStr.includes('карта') || typeStr.includes('credit') || typeStr.includes('card')) {
       return 'high';
     }
-    if (incidentType.includes('Email') || incidentType.includes('Телефон')) {
+    if (typeStr.includes('email') || typeStr.includes('почта') || typeStr.includes('телефон') || typeStr.includes('phone')) {
       return 'medium';
     }
     return 'low';
@@ -128,6 +196,9 @@ export default function IncidentList() {
 
   // Получение бейджа действия
   const getActionBadge = (action) => {
+    if (!action) return { text: 'НЕТ ДЕЙСТВИЯ', class: 'default' };
+    
+    const actionStr = action.toString().toUpperCase();
     const badges = {
       'BLOCK': { text: 'БЛОКИРОВАНО', class: 'blocked' },
       'MASK': { text: 'МАСКИРОВАНО', class: 'masked' },
@@ -135,7 +206,8 @@ export default function IncidentList() {
       'QUARANTINE': { text: 'КАРАНТИН', class: 'quarantine' },
       'NOTIFY': { text: 'УВЕДОМЛЕНИЕ', class: 'notify' }
     };
-    return badges[action] || { text: action, class: 'default' };
+    
+    return badges[actionStr] || { text: action, class: 'default' };
   };
 
   if (loading && incidents.length === 0) {
@@ -194,8 +266,9 @@ export default function IncidentList() {
               <th className="checkbox-column">
                 <input
                   type="checkbox"
-                  checked={selectedIncidents.size === incidents.length && incidents.length > 0}
+                  checked={incidents.length > 0 && selectedIncidents.size === incidents.length}
                   onChange={toggleSelectAll}
+                  disabled={incidents.length === 0}
                 />
               </th>
               <th onClick={() => handleSort('timestamp')} className="sortable">
@@ -231,7 +304,7 @@ export default function IncidentList() {
             {sortedIncidents.length === 0 ? (
               <tr>
                 <td colSpan="7" className="empty-state">
-                  Инциденты не найдены
+                  {loading ? 'Загрузка...' : 'Инциденты не найдены'}
                 </td>
               </tr>
             ) : (
@@ -252,11 +325,11 @@ export default function IncidentList() {
                   </td>
                   <td className="type-column">
                     <span className={`severity-badge ${getSeverityClass(incident.incident_type)}`}>
-                      {incident.incident_type}
+                      {incident.incident_type || 'Не указан'}
                     </span>
                   </td>
                   <td className="user-column">
-                    <code>{incident.user_id}</code>
+                    <code>{incident.user_id || 'N/A'}</code>
                   </td>
                   <td className="platform-column">
                     {incident.platform || 'N/A'}
